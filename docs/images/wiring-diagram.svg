@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+<style>
+text{font-family:Arial,sans-serif;fill:#111} .h{font-size:30px;font-weight:700}.t{font-size:20px}.s{font-size:16px}.box{fill:#fff;stroke:#222;stroke-width:3}.line{stroke:#222;stroke-width:4;fill:none}.dash{stroke:#666;stroke-width:3;stroke-dasharray:9 7;fill:none}
+</style>
+<rect width="1600" height="1000" fill="white"/>
+<text x="40" y="50" class="h">Pops Autonomous Mower - Logical Wiring Diagram</text>
+<text x="40" y="82" class="s">Verify exact ESP32 board pinout and connector labels before applying power.</text>
+
+<rect x="50" y="140" width="250" height="150" class="box"/><text x="85" y="185" class="t">12 V Battery</text>
+<text x="85" y="225" class="s">+ through fuse / disconnect</text><text x="85" y="255" class="s">- common ground</text>
+
+<rect x="390" y="110" width="300" height="220" class="box"/><text x="475" y="150" class="t">ESP32</text>
+<text x="420" y="185" class="s">FlySky: GPIO 32/33/25</text><text x="420" y="215" class="s">4 x BTS7960 PWM/EN</text>
+<text x="420" y="245" class="s">BU04/DW3000 over SPI</text><text x="420" y="275" class="s">RC / AUTO safety interlock</text>
+
+<rect x="780" y="120" width="250" height="190" class="box"/><text x="835" y="160" class="t">FlySky Receiver</text>
+<text x="815" y="200" class="s">CH1 throttle</text><text x="815" y="230" class="s">CH2 steering</text><text x="815" y="260" class="s">CH3 mode</text>
+
+<rect x="1160" y="110" width="350" height="220" class="box"/><text x="1240" y="150" class="t">Mower UWB</text>
+<text x="1200" y="185" class="s">BU04-KIT / DW3000</text><text x="1200" y="215" class="s">SPI CLK/MOSI/MISO/CSN</text>
+<text x="1200" y="245" class="s">IRQ / RESET / WAKEUP</text><text x="1200" y="275" class="s">Ranges to A1-A4</text>
+
+<path d="M300 190 L390 190" class="line"/><text x="315" y="175" class="s">BEC / logic</text>
+<path d="M780 205 L690 205" class="line"/>
+<path d="M1160 215 L690 215" class="line"/>
+
+<rect x="50" y="390" width="270" height="130" class="box"/><text x="90" y="430" class="t">BTS7960 - FL</text><text x="90" y="465" class="s">GPIO 13 / 14 / 27</text>
+<rect x="400" y="390" width="270" height="130" class="box"/><text x="440" y="430" class="t">BTS7960 - FR</text><text x="440" y="465" class="s">GPIO 26 / 12 / 4</text>
+<rect x="750" y="390" width="270" height="130" class="box"/><text x="790" y="430" class="t">BTS7960 - RL</text><text x="790" y="465" class="s">GPIO 18 / 19 / 23</text>
+<rect x="1100" y="390" width="270" height="130" class="box"/><text x="1140" y="430" class="t">BTS7960 - RR</text><text x="1140" y="465" class="s">GPIO 5 / 17 / 16</text>
+
+<path d="M520 330 L185 390" class="line"/><path d="M540 330 L535 390" class="line"/><path d="M560 330 L885 390" class="line"/><path d="M580 330 L1235 390" class="line"/>
+
+<rect x="70" y="600" width="230" height="100" class="box"/><text x="115" y="645" class="t">755 Motor FL</text>
+<rect x="420" y="600" width="230" height="100" class="box"/><text x="465" y="645" class="t">755 Motor FR</text>
+<rect x="770" y="600" width="230" height="100" class="box"/><text x="815" y="645" class="t">755 Motor RL</text>
+<rect x="1120" y="600" width="230" height="100" class="box"/><text x="1165" y="645" class="t">755 Motor RR</text>
+
+<path d="M185 520 L185 600" class="line"/><path d="M535 520 L535 600" class="line"/><path d="M885 520 L885 600" class="line"/><path d="M1235 520 L1235 600" class="line"/>
+
+<rect x="80" y="790" width="1350" height="130" class="box"/>
+<text x="110" y="830" class="t">Four fixed yard anchors: A1, A2, A3, A4 - each BU04-KIT / DW3000</text>
+<text x="110" y="865" class="s">Mower unit ranges to the four anchors; four-anchor solution feeds X/Y position into autonomous navigation.</text>
+<text x="110" y="895" class="s">Physical E-stop should interrupt motor power independently of ESP32 software.</text>
+<path d="M1335 330 L1335 790" class="dash"/>
+</svg>
