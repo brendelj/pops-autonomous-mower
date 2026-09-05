@@ -1,27 +1,80 @@
 /*
-=====================================================================
- POPS' ESP32 4-WHEEL MOWER DRIVE CONTROLLER
-=====================================================================
- ESP32 PINOUT - SOURCE OF TRUTH
- GPIO34 FlySky CH1 steering
- GPIO35 FlySky CH2 throttle
- GPIO23 RC/AUTO switch (LOW=AUTO)
- GPIO16 RX2 <- Autonomous ESP32 TX
- GPIO17 TX2 -> Autonomous ESP32 RX
- GPIO25 FL RPWM   GPIO26 FL LPWM
- GPIO27 FR RPWM   GPIO14 FR LPWM
- GPIO32 RL RPWM   GPIO33 RL LPWM
- GPIO18 RR RPWM   GPIO19 RR LPWM
- GPIO13 shared BTS7960 R_EN/L_EN
+==========================================================================================
+ POPS' AUTONOMOUS MOWER - MOWER CART DRIVE CONTROLLER
+==========================================================================================
+ BOARD / HARDWARE
+ -----------------------------------------------------------------------------------------
+ Maker / kit: AITRIP
+ Board:       ESP-WROOM-32 ESP32 / ESP-32S Type-C USB Development Board
+ USB-UART:    CH340C
+ Module:      ESP-WROOM-32
+ Style:       ESP32-DevKitC-32 compatible, 38-pin / 19 pins per side
+ USB:         Type-C
 
- Front wheel: 11.50"
- Rear wheel:  12.25"
- Front scale: 12.25/11.50 = 1.065217
+ IMPORTANT: Diagram is viewed from ABOVE with the Type-C connector at the BOTTOM.
+ Every physical header pin is shown, including pins not used by this sketch.
 
- AUTO serial:
- DRV,<throttle>,<steering>  (-1000..1000)
- STOP
-=====================================================================
+                                   ANTENNA
+                              .---------------.
+                              | ESP-WROOM-32  |
+                              |               |
+        3V3  UNUSED      3V3 | o           o | GND      COMMON GROUND
+         EN  UNUSED       EN | o           o | GPIO23   AUTO/RC SWITCH (LOW=AUTO)
+ GPIO36/VP  UNUSED        36 | o           o | GPIO22   UNUSED
+ GPIO39/VN  UNUSED        39 | o           o | GPIO1    TX0 / USB DEBUG
+ FlySky CH1 STEERING ---> 34 | o           o | GPIO3    RX0 / USB DEBUG
+ FlySky CH2 THROTTLE ---> 35 | o           o | GPIO21   UNUSED
+ REAR LEFT RPWM      <--- 32 | o           o | GND      COMMON GROUND
+ REAR LEFT LPWM      <--- 33 | o           o | GPIO19   REAR RIGHT LPWM
+ FRONT LEFT RPWM     <--- 25 | o           o | GPIO18   REAR RIGHT RPWM
+ FRONT LEFT LPWM     <--- 26 | o           o | GPIO5    UNUSED
+ FRONT RIGHT RPWM    <--- 27 | o           o | GPIO17   TX2 -> AUTONOMOUS ESP32 RX
+ FRONT RIGHT LPWM    <--- 14 | o           o | GPIO16   RX2 <- AUTONOMOUS ESP32 TX
+ UNUSED / STRAP           12 | o           o | GPIO4    UNUSED
+ BTS7960 R_EN + L_EN <--- 13 | o           o | GPIO0    UNUSED / BOOT STRAP
+ UNUSED / FLASH           9 | o           o | GPIO2    UNUSED / STRAP
+ UNUSED / FLASH          10 | o           o | GPIO15   UNUSED / STRAP
+ UNUSED / FLASH          11 | o           o | GPIO8    UNUSED / FLASH
+                  GND    GND | o           o | GPIO7    UNUSED / FLASH
+ +5V BUCK ------------>  VIN | o           o | GPIO6    UNUSED / FLASH
+                              |               |
+                              |    TYPE-C     |
+                              '------| |------'
+
+==========================================================================================
+ LOCKED GPIO ASSIGNMENTS - SOURCE OF TRUTH
+==========================================================================================
+ INPUTS
+   GPIO34  FlySky CH1 steering
+   GPIO35  FlySky CH2 throttle
+   GPIO23  Physical RC/AUTO switch: OPEN=RC, CLOSED TO GND=AUTO
+
+ AUTONOMOUS ESP32 UART
+   GPIO16  RX2 <- Autonomous ESP32 TX
+   GPIO17  TX2 -> Autonomous ESP32 RX (optional status/debug)
+
+ FOUR BTS7960 MOTOR CONTROLLERS
+   FRONT LEFT:   GPIO25 RPWM, GPIO26 LPWM
+   FRONT RIGHT:  GPIO27 RPWM, GPIO14 LPWM
+   REAR LEFT:    GPIO32 RPWM, GPIO33 LPWM
+   REAR RIGHT:   GPIO18 RPWM, GPIO19 LPWM
+   GPIO13 -> R_EN and L_EN of all four BTS7960 boards
+
+ POWER
+   12V battery -> fused motor-power distribution -> four BTS7960 boards
+   12V battery -> 5V buck -> ESP32 VIN/5V and receiver/logic supply as appropriate
+   ALL GROUNDS COMMON.
+
+ WHEEL CALIBRATION
+   Front diameter = 11.50 inches
+   Rear diameter  = 12.25 inches
+   Front scale    = 12.25 / 11.50 = 1.065217
+   FL_TRIM, FR_TRIM, RL_TRIM and RR_TRIM are independently adjustable.
+
+ AUTO SERIAL
+   DRV,<throttle>,<steering>   values -1000..+1000
+   STOP
+==========================================================================================
 */
 #include <Arduino.h>
 #if __has_include(<esp_arduino_version.h>)
