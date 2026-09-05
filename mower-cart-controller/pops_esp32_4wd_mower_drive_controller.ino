@@ -5,75 +5,105 @@
  BOARD / HARDWARE
  -----------------------------------------------------------------------------------------
  Maker / kit: AITRIP
- Board:       ESP-WROOM-32 ESP32 / ESP-32S Type-C USB Development Board
+ Product:     ESP-WROOM-32 ESP32 / ESP-32S Type-C USB Development Board
  USB-UART:    CH340C
  Module:      ESP-WROOM-32
- Style:       ESP32-DevKitC-32 compatible, 38-pin / 19 pins per side
+ Board type:  30-pin ESP32 development board (15 pins per side)
  USB:         Type-C
 
- IMPORTANT: Diagram is viewed from ABOVE with the Type-C connector at the BOTTOM.
- Every physical header pin is shown, including pins not used by this sketch.
+ IMPORTANT:
+ This diagram matches the actual 30-pin board shown with the AITRIP expansion board.
+ Viewed from ABOVE, component side up, with the Type-C connector at the BOTTOM.
+ EVERY physical header pin is shown, whether used by this sketch or not.
 
-                                   ANTENNA
-                              .---------------.
-                              | ESP-WROOM-32  |
-                              |               |
-        3V3  UNUSED      3V3 | o           o | GND      COMMON GROUND
-         EN  UNUSED       EN | o           o | GPIO23   AUTO/RC SWITCH (LOW=AUTO)
- GPIO36/VP  UNUSED        36 | o           o | GPIO22   UNUSED
- GPIO39/VN  UNUSED        39 | o           o | GPIO1    TX0 / USB DEBUG
- FlySky CH1 STEERING ---> 34 | o           o | GPIO3    RX0 / USB DEBUG
- FlySky CH2 THROTTLE ---> 35 | o           o | GPIO21   UNUSED
- REAR LEFT RPWM      <--- 32 | o           o | GND      COMMON GROUND
- REAR LEFT LPWM      <--- 33 | o           o | GPIO19   REAR RIGHT LPWM
- FRONT LEFT RPWM     <--- 25 | o           o | GPIO18   REAR RIGHT RPWM
- FRONT LEFT LPWM     <--- 26 | o           o | GPIO5    UNUSED
- FRONT RIGHT RPWM    <--- 27 | o           o | GPIO17   TX2 -> AUTONOMOUS ESP32 RX
- FRONT RIGHT LPWM    <--- 14 | o           o | GPIO16   RX2 <- AUTONOMOUS ESP32 TX
- UNUSED / STRAP           12 | o           o | GPIO4    UNUSED
- BTS7960 R_EN + L_EN <--- 13 | o           o | GPIO0    UNUSED / BOOT STRAP
- UNUSED / FLASH           9 | o           o | GPIO2    UNUSED / STRAP
- UNUSED / FLASH          10 | o           o | GPIO15   UNUSED / STRAP
- UNUSED / FLASH          11 | o           o | GPIO8    UNUSED / FLASH
-                  GND    GND | o           o | GPIO7    UNUSED / FLASH
- +5V BUCK ------------>  VIN | o           o | GPIO6    UNUSED / FLASH
-                              |               |
-                              |    TYPE-C     |
-                              '------| |------'
+                                  ANTENNA
+                            .-----------------.
+                            |   ESP-WROOM-32  |
+                            |                 |
+ UNUSED                EN  | o             o | D23 / GPIO23  <--- RC/AUTO SWITCH
+ UNUSED        VP / GPIO36 | o             o | D22 / GPIO22       UNUSED
+ UNUSED        VN / GPIO39 | o             o | TX0 / GPIO1        USB SERIAL TX
+ FlySky CH1 STEERING --->34| o             o | RX0 / GPIO3        USB SERIAL RX
+ FlySky CH2 THROTTLE --->35| o             o | D21 / GPIO21       UNUSED
+ REAR LEFT RPWM       <---32| o             o | D19 / GPIO19  <--- REAR RIGHT LPWM
+ REAR LEFT LPWM       <---33| o             o | D18 / GPIO18  <--- REAR RIGHT RPWM
+ FRONT LEFT RPWM      <---25| o             o | D5  / GPIO5        UNUSED
+ FRONT LEFT LPWM      <---26| o             o | D17 / GPIO17  ---> AUTO ESP32 RX (TX2)
+ FRONT RIGHT RPWM     <---27| o             o | D16 / GPIO16  <--- AUTO ESP32 TX (RX2)
+ FRONT RIGHT LPWM     <---14| o             o | D4  / GPIO4        UNUSED
+ UNUSED / STRAP          12| o             o | D2  / GPIO2        UNUSED / STRAP
+ BTS7960 ENABLE       <---13| o             o | D15 / GPIO15       UNUSED / STRAP
+ COMMON GROUND          GND| o             o | GND                COMMON GROUND
+ +5V BUCK ------------> VIN| o             o | 3V3                UNUSED
+                            |                 |
+                            |     TYPE-C      |
+                            '-------| |-------'
+
+ PHYSICAL HEADER ORDER (TOP -> BOTTOM)
+ -----------------------------------------------------------------------------------------
+ LEFT SIDE                               RIGHT SIDE
+ EN                                      D23 / GPIO23
+ VP / GPIO36                             D22 / GPIO22
+ VN / GPIO39                             TX0 / GPIO1
+ D34 / GPIO34                            RX0 / GPIO3
+ D35 / GPIO35                            D21 / GPIO21
+ D32 / GPIO32                            D19 / GPIO19
+ D33 / GPIO33                            D18 / GPIO18
+ D25 / GPIO25                            D5  / GPIO5
+ D26 / GPIO26                            D17 / GPIO17
+ D27 / GPIO27                            D16 / GPIO16
+ D14 / GPIO14                            D4  / GPIO4
+ D12 / GPIO12                            D2  / GPIO2
+ D13 / GPIO13                            D15 / GPIO15
+ GND                                     GND
+ VIN                                     3V3
 
 ==========================================================================================
  LOCKED GPIO ASSIGNMENTS - SOURCE OF TRUTH
 ==========================================================================================
- INPUTS
+ RC INPUT
    GPIO34  FlySky CH1 steering
    GPIO35  FlySky CH2 throttle
-   GPIO23  Physical RC/AUTO switch: OPEN=RC, CLOSED TO GND=AUTO
+
+ PHYSICAL CONTROL SOURCE SWITCH
+   GPIO23  RC/AUTO selector using INPUT_PULLUP
+           Switch OPEN          = RC MODE
+           Switch CLOSED to GND = AUTONOMOUS MODE
 
  AUTONOMOUS ESP32 UART
    GPIO16  RX2 <- Autonomous ESP32 TX
    GPIO17  TX2 -> Autonomous ESP32 RX (optional status/debug)
 
  FOUR BTS7960 MOTOR CONTROLLERS
-   FRONT LEFT:   GPIO25 RPWM, GPIO26 LPWM
-   FRONT RIGHT:  GPIO27 RPWM, GPIO14 LPWM
-   REAR LEFT:    GPIO32 RPWM, GPIO33 LPWM
-   REAR RIGHT:   GPIO18 RPWM, GPIO19 LPWM
-   GPIO13 -> R_EN and L_EN of all four BTS7960 boards
+   FRONT LEFT    GPIO25 RPWM    GPIO26 LPWM
+   FRONT RIGHT   GPIO27 RPWM    GPIO14 LPWM
+   REAR LEFT     GPIO32 RPWM    GPIO33 LPWM
+   REAR RIGHT    GPIO18 RPWM    GPIO19 LPWM
+
+   GPIO13 -> R_EN and L_EN on ALL FOUR BTS7960 boards
 
  POWER
-   12V battery -> fused motor-power distribution -> four BTS7960 boards
-   12V battery -> 5V buck -> ESP32 VIN/5V and receiver/logic supply as appropriate
-   ALL GROUNDS COMMON.
+   12V battery -> appropriately fused motor distribution -> BTS7960 motor power
+   12V battery -> regulated 5V buck -> ESP32 VIN
+   All controller/receiver logic supplies must be appropriate for their hardware.
+   ALL system grounds must share a common reference.
 
  WHEEL CALIBRATION
-   Front diameter = 11.50 inches
-   Rear diameter  = 12.25 inches
-   Front scale    = 12.25 / 11.50 = 1.065217
-   FL_TRIM, FR_TRIM, RL_TRIM and RR_TRIM are independently adjustable.
+   Front wheel diameter = 11.50 inches
+   Rear wheel diameter  = 12.25 inches
+   Front wheel scale    = 12.25 / 11.50 = 1.065217
 
- AUTO SERIAL
-   DRV,<throttle>,<steering>   values -1000..+1000
+   FL_TRIM, FR_TRIM, RL_TRIM and RR_TRIM remain independently adjustable.
+
+ AUTONOMOUS SERIAL COMMANDS
+   DRV,<throttle>,<steering>
+   throttle and steering range: -1000 through +1000
    STOP
+
+ FAILSAFE
+   RC signal timeout stops all motors.
+   Autonomous command timeout stops all motors.
+   Changing RC/AUTO mode forces a temporary stop.
 ==========================================================================================
 */
 #include <Arduino.h>
