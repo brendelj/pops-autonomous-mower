@@ -493,6 +493,12 @@ void loop(){
  }else{
   uint16_t sp,tp;uint32_t sLast,tLast;noInterrupts();
   sp=steeringPulseUs;tp=throttlePulseUs;sLast=steeringLastPulseMs;tLast=throttleLastPulseMs;interrupts();
+  // TEMPORARY RC DIAGNOSTIC - raw FlySky receiver pulse widths only
+  static uint32_t lastRcDebugMs=0;
+  if(millis()-lastRcDebugMs>=250){
+   lastRcDebugMs=millis();
+   Serial.print("CH1 STEERING = ");Serial.print(sp);Serial.print(" us    CH2 THROTTLE = ");Serial.print(tp);Serial.println(" us");
+  }
   uint32_t now=millis();
   if(now-sLast>=RC_TIMEOUT_MS||now-tLast>=RC_TIMEOUT_MS){haltAll();rcArmed=false;rcNeutralTiming=false;delay(5);return;}
   float s=convertCenteredRc(sp,RC_STEER_LEFT_US,RC_STEER_CENTER_US,RC_STEER_RIGHT_US,RC_STEER_DEADBAND_US);
