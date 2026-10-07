@@ -1,7 +1,19 @@
 /*
 ==========================================================================================
- POPS' AUTONOMOUS MOWER - MOWER CART DRIVE CONTROLLER                     (revision 3)
+ POPS' AUTONOMOUS MOWER - MOWER CART DRIVE CONTROLLER                     (revision 4)
 ==========================================================================================
+ REVISION 4 STEERING / CURRENT CONTROL
+ -----------------------------------------------------------------------------------------
+   1. Replaces additive throttle+steering mixing with a power-reducing skid-steer mixer.
+      Steering NEVER increases the outside side above the requested throttle.
+   2. Gentle turns slow only the inside side slightly. Increasing steering progressively
+      slows the inside side toward zero and also slows the entire cart for a hard turn.
+   3. Near-zero-throttle tank pivots are deliberately capped at 25% command.
+   4. Adds USB serial diagnostics showing normalized throttle/steering and calculated
+      LEFT/RIGHT plus FL/FR/RL/RR logical wheel commands for safe bench testing.
+   5. ALL GPIO assignments, wheel-size compensation, motor reversal flags, ramping,
+      sonar interlocks, RC failsafes and autonomous protocol remain unchanged.
+
  REVISION 3 REVIEW / CHANGES
  -----------------------------------------------------------------------------------------
  REVISION 3 ADDS TO THE REVISION 2 SAFETY WORK
@@ -274,6 +286,11 @@ const float MAX_THROTTLE=1.0f;
 const float RAMP_ACCEL_PER_SEC=2.0f;
 const float RAMP_DECEL_PER_SEC=6.0f;
 
+// Revision 4 skid-steer tuning. These values reduce current demand during turns.
+const float PIVOT_THROTTLE_THRESHOLD=0.05f;
+const float PIVOT_MAX_POWER=0.25f;
+const float HARD_TURN_OUTSIDE_REDUCTION=0.45f; // full moving turn: outside side = 55% of requested throttle
+
 const bool AUTO_REQUIRE_CHECKSUM=false;
 
 const float OBSTACLE_STOP_CM=30.48f;
@@ -345,11 +362,28 @@ void normalizeWheelCommands(float&fl,float&fr,float&rl,float&rr){
  float m=max(max(fabs(fl),fabs(fr)),max(fabs(rl),fabs(rr)));
  if(m>1.0f){fl/=m;fr/=m;rl/=m;rr/=m;}
 }
+void calculateDriveCommands(float throttle,float steering,float& left,float& right){
+ throttle=constrain(throttle,-1.0f,1.0f);steering=constrain(steering,-1.0f,1.0f);
+ const float turn=fabsf(steering);
+ if(fabsf(throttle)<=PIVOT_THROTTLE_THRESHOLD){
+  // Deliberately slow tank pivot. Steering sign selects pivot direction.
+  const float pivot=steering*PIVOT_MAX_POWER;
+  left=pivot;right=-pivot;return;
+ }
+ // Moving turn: NEVER add steering power to the outside side.
+ // Quadratic shaping keeps small corrections gentle while strongly reducing hard turns.
+ const float outsideScale=1.0f-(HARD_TURN_OUTSIDE_REDUCTION*turn*turn);
+ const float insideScale=outsideScale*(1.0f-(turn*turn));
+ const float outside=throttle*outsideScale;
+ const float inside=throttle*insideScale;
+ if(steering>0.0f){left=outside;right=inside;}
+ else if(steering<0.0f){left=inside;right=outside;}
+ else{left=throttle;right=throttle;}
+}
 void driveMower(float throttle,float steering){
- float left=throttle+steering,right=throttle-steering,m=max(fabs(left),fabs(right));
- if(m>1.0f){left/=m;right/=m;}
+ float left,right;calculateDriveCommands(throttle,steering,left,right);
  float fl=left*FRONT_WHEEL_SCALE*FL_TRIM,fr=right*FRONT_WHEEL_SCALE*FR_TRIM;
- float rl=left*RL_TRIM,rr=right*RR_TRIM; normalizeWheelCommands(fl,fr,rl,rr);
+ float rl=left*RL_TRIM,rr=right*RR_TRIM;normalizeWheelCommands(fl,fr,rl,rr);
  setMotor(PIN_FL_RPWM,PIN_FL_LPWM,fl,FL_REVERSED);setMotor(PIN_FR_RPWM,PIN_FR_LPWM,fr,FR_REVERSED);
  setMotor(PIN_RL_RPWM,PIN_RL_LPWM,rl,RL_REVERSED);setMotor(PIN_RR_RPWM,PIN_RR_LPWM,rr,RR_REVERSED);
 }
@@ -493,16 +527,19 @@ void loop(){
  }else{
   uint16_t sp,tp;uint32_t sLast,tLast;noInterrupts();
   sp=steeringPulseUs;tp=throttlePulseUs;sLast=steeringLastPulseMs;tLast=throttleLastPulseMs;interrupts();
-  // TEMPORARY RC DIAGNOSTIC - raw FlySky receiver pulse widths only
-  static uint32_t lastRcDebugMs=0;
-  if(millis()-lastRcDebugMs>=250){
-   lastRcDebugMs=millis();
-   Serial.print("CH1 STEERING = ");Serial.print(sp);Serial.print(" us    CH2 THROTTLE = ");Serial.print(tp);Serial.println(" us");
-  }
   uint32_t now=millis();
   if(now-sLast>=RC_TIMEOUT_MS||now-tLast>=RC_TIMEOUT_MS){haltAll();rcArmed=false;rcNeutralTiming=false;delay(5);return;}
   float s=convertCenteredRc(sp,RC_STEER_LEFT_US,RC_STEER_CENTER_US,RC_STEER_RIGHT_US,RC_STEER_DEADBAND_US);
   float t=convertCenteredRc(tp,RC_THROTTLE_REV_US,RC_THROTTLE_NEUTRAL_US,RC_THROTTLE_FWD_US,RC_THROTTLE_DEADBAND_US);
+  // TEMPORARY RC / MIXER BENCH DIAGNOSTIC. Motor power may remain disconnected.
+  static uint32_t lastRcDebugMs=0;
+  if(now-lastRcDebugMs>=250){
+   lastRcDebugMs=now;float dl,dr;calculateDriveCommands(t,s,dl,dr);
+   float dfl=dl*FRONT_WHEEL_SCALE*FL_TRIM,dfr=dr*FRONT_WHEEL_SCALE*FR_TRIM;
+   float drl=dl*RL_TRIM,drr=dr*RR_TRIM;normalizeWheelCommands(dfl,dfr,drl,drr);
+   Serial.printf("CH1=%u CH2=%u  T=%+.2f S=%+.2f  L=%+.2f R=%+.2f  FL=%+.2f FR=%+.2f RL=%+.2f RR=%+.2f\\n",
+    sp,tp,t,s,dl,dr,dfl,dfr,drl,drr);
+  }
   if(!rcArmed){
    if(t==0.0f&&s==0.0f){if(!rcNeutralTiming){rcNeutralTiming=true;rcNeutralStartMs=now;}else if(now-rcNeutralStartMs>=RC_NEUTRAL_HOLD_MS)rcArmed=true;}
    else rcNeutralTiming=false;if(!rcArmed){haltAll();delay(5);return;}
