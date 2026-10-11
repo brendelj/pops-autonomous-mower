@@ -1,12 +1,13 @@
 /*
 ==========================================================================================
- POPS' AUTONOMOUS MOWER - MOWER CART DRIVE CONTROLLER                     (revision 8)
+ POPS' AUTONOMOUS MOWER - MOWER CART DRIVE CONTROLLER                     (revision 9)
 ==========================================================================================
- REVISION 8 - HIGH-TORQUE PIVOT AND SPEED-SENSITIVE DIFFERENTIAL STEERING
+ REVISION 9 - LOW-SPEED SKID STEERING AND WHEEL DIAGNOSTICS
  -----------------------------------------------------------------------------------------
    Periodic status includes firmware revision, GPIO22 and bench state.
-   Sensor bypass requires BOTH jumper detection and RC diagnostic confirmation.
-   Per-wheel 15% cap is applied after mixing; pivot threshold is not rescaled.
+   GPIO22 LOW disables absent ultrasonic sensors in RC mode.
+   At low speed, full steering can reverse the inside wheels for stronger turns.
+   Serial diagnostics include actual post-reversal motor drive signs.
 
  REVISION 5 - GROUNDED GPIO22 BENCH DIAGNOSTIC / 10% PIVOT
  -----------------------------------------------------------------------------------------
@@ -304,7 +305,7 @@ const float RAMP_DECEL_PER_SEC=6.0f;
 // Stationary: throttle within 10us of neutral produces counter-rotating wheels.
 // Pivot power is capped to limit current surges; tune after measuring motor current.
 const float PIVOT_MAX_POWER=0.65f;
-const float LOW_SPEED_STEER_REDUCTION=0.95f;
+const float LOW_SPEED_STEER_REDUCTION=1.20f; // at low speed, full steering can reverse inside wheels
 const float HIGH_SPEED_STEER_REDUCTION=0.55f;
 const float STEER_SPEED_TRANSITION=0.50f;
 
@@ -507,14 +508,14 @@ bool readAutoSwitch(){
 const char* sonarText(const SonarState& s){return s.fault?"FAULT":(s.blocked?"BLOCK":"clear");}
 void printStatus(bool autoMode){
  uint32_t now=millis();if(now-lastStatusMs<STATUS_INTERVAL_MS)return;lastStatusMs=now;
- Serial.printf("REV8 mode=%s ramp=%+.2f/%+.2f rcArmed=%d GPIO22=%d sonarDisabled=%d front=%s(%.0fcm,%s) rear=%s(%.0fcm,%s)\n",
+ Serial.printf("REV9 mode=%s ramp=%+.2f/%+.2f rcArmed=%d GPIO22=%d sonarDisabled=%d front=%s(%.0fcm,%s) rear=%s(%.0fcm,%s)\n",
  autoMode?"AUTO":"RC",rampThrottle,rampSteering,rcArmed?1:0,digitalRead(PIN_FRONT_ECHO),benchRequested?1:0,
  sonarText(frontSonar),frontSonar.distanceCm,frontSonar.armed?"armed":"UNARMED",
  sonarText(rearSonar),rearSonar.distanceCm,rearSonar.armed?"armed":"UNARMED");
 }
 
 void setup(){
- Serial.begin(115200);Serial.println("POPS MOWER CART FIRMWARE REVISION 8");Serial2.begin(115200,SERIAL_8N1,PIN_AUTO_RX,PIN_AUTO_TX);
+ Serial.begin(115200);Serial.println("POPS MOWER CART FIRMWARE REVISION 9");Serial2.begin(115200,SERIAL_8N1,PIN_AUTO_RX,PIN_AUTO_TX);
  pinMode(PIN_MOTOR_ENABLE,OUTPUT);digitalWrite(PIN_MOTOR_ENABLE,LOW);
  pinMode(PIN_RC_STEERING,INPUT);pinMode(PIN_RC_THROTTLE,INPUT);pinMode(PIN_AUTO_SWITCH,INPUT_PULLUP);
  // GPIO22 is shared with front ECHO. Unplug the ECHO wire AND divider before using jumper.
@@ -568,8 +569,8 @@ void loop(){
    lastRcDebugMs=now;float dl,dr;calculateDriveCommands(t,s,dl,dr);
    float dfl=dl*FRONT_WHEEL_SCALE*FL_TRIM,dfr=dr*FRONT_WHEEL_SCALE*FR_TRIM;
    float drl=dl*RL_TRIM,drr=dr*RR_TRIM;normalizeWheelCommands(dfl,dfr,drl,drr);
-   Serial.printf("CH1=%u CH2=%u  T=%+.2f S=%+.2f  L=%+.2f R=%+.2f  FL=%+.2f FR=%+.2f RL=%+.2f RR=%+.2f\n",
-    sp,tp,t,s,dl,dr,dfl,dfr,drl,drr);
+   Serial.printf("REV9 CH1=%u CH2=%u T=%+.2f S=%+.2f L=%+.2f R=%+.2f FL=%+.2f FR=%+.2f RL=%+.2f RR=%+.2f | MOTOR_SIGN FL=%+.2f FR=%+.2f RL=%+.2f RR=%+.2f\n",
+     sp,tp,t,s,dl,dr,dfl,dfr,drl,drr,FL_REVERSED?-dfl:dfl,FR_REVERSED?-dfr:dfr,RL_REVERSED?-drl:drl,RR_REVERSED?-drr:drr);
   }
   if(!rcArmed){
    if(t==0.0f&&s==0.0f){if(!rcNeutralTiming){rcNeutralTiming=true;rcNeutralStartMs=now;}else if(now-rcNeutralStartMs>=RC_NEUTRAL_HOLD_MS)rcArmed=true;}
