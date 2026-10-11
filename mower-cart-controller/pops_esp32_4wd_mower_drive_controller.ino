@@ -1,7 +1,13 @@
 /*
 ==========================================================================================
- POPS' AUTONOMOUS MOWER - MOWER CART DRIVE CONTROLLER                     (revision 5)
+ POPS' AUTONOMOUS MOWER - MOWER CART DRIVE CONTROLLER                     (revision 6)
 ==========================================================================================
+ REVISION 6 - VISIBLE BENCH STATE / FAIL-CLOSED MOTOR INTERLOCK
+ -----------------------------------------------------------------------------------------
+   Periodic status includes firmware revision, GPIO22 and bench state.
+   Sensor bypass requires BOTH jumper detection and RC diagnostic confirmation.
+   Per-wheel 15% cap is applied after mixing; pivot threshold is not rescaled.
+
  REVISION 5 - GROUNDED GPIO22 BENCH DIAGNOSTIC / 10% PIVOT
  -----------------------------------------------------------------------------------------
    GPIO22-to-GND at boot requests a restricted RC-only bench mode; the front ECHO
@@ -397,7 +403,7 @@ void driveMower(float throttle,float steering){
  float left,right;calculateDriveCommands(throttle,steering,left,right);
  float fl=left*FRONT_WHEEL_SCALE*FL_TRIM,fr=right*FRONT_WHEEL_SCALE*FR_TRIM;
  float rl=left*RL_TRIM,rr=right*RR_TRIM;normalizeWheelCommands(fl,fr,rl,rr);
- if(benchRequested){fl=constrain(fl,-BENCH_MAX_POWER,BENCH_MAX_POWER);fr=constrain(fr,-BENCH_MAX_POWER,BENCH_MAX_POWER);rl=constrain(rl,-BENCH_MAX_POWER,BENCH_MAX_POWER);rr=constrain(rr,-BENCH_MAX_POWER,BENCH_MAX_POWER);}
+ if(benchRequested && benchConfirmed){fl=constrain(fl,-BENCH_MAX_POWER,BENCH_MAX_POWER);fr=constrain(fr,-BENCH_MAX_POWER,BENCH_MAX_POWER);rl=constrain(rl,-BENCH_MAX_POWER,BENCH_MAX_POWER);rr=constrain(rr,-BENCH_MAX_POWER,BENCH_MAX_POWER);}
  setMotor(PIN_FL_RPWM,PIN_FL_LPWM,fl,FL_REVERSED);setMotor(PIN_FR_RPWM,PIN_FR_LPWM,fr,FR_REVERSED);
  setMotor(PIN_RL_RPWM,PIN_RL_LPWM,rl,RL_REVERSED);setMotor(PIN_RR_RPWM,PIN_RR_LPWM,rr,RR_REVERSED);
 }
@@ -451,7 +457,7 @@ void updateSonars(){
  if(sampleFrontNext)updateOneSonar(frontSonar,true);else updateOneSonar(rearSonar,false);sampleFrontNext=!sampleFrontNext;
 }
 bool applyObstacleInterlock(float& throttle,float& steering){
- if(benchRequested)return false; // Only in manually confirmed, RC-only elevated-wheel diagnostic
+ if(benchRequested && benchConfirmed)return false; // Confirmed RC-only elevated-wheel diagnostic
  bool cut=false;if(throttle>0.0f&&frontSonar.blocked){throttle=0.0f;cut=true;}
  if(throttle<0.0f&&rearSonar.blocked){throttle=0.0f;cut=true;}steering=constrain(steering,-1.0f,1.0f);return cut;
 }
@@ -466,12 +472,6 @@ void driveWithRamp(float targetThrottle,float targetSteering){
  targetThrottle=constrain(targetThrottle,-1.0f,1.0f)*MAX_THROTTLE;targetSteering=constrain(targetSteering,-1.0f,1.0f);
  rampThrottle=slewLimit(rampThrottle,targetThrottle,dt);rampSteering=slewLimit(rampSteering,targetSteering,dt);
  float t=rampThrottle,s=rampSteering;applyObstacleInterlock(t,s);rampThrottle=t;
- if(benchRequested){
-  // Limit the actual wheel commands, including stationary pivots.
-  float left,right;calculateDriveCommands(t,s,left,right);
-  float peak=max(fabsf(left),fabsf(right));
-  if(peak>BENCH_MAX_POWER){float scale=BENCH_MAX_POWER/peak;t*=scale;s*=scale;}
- }
  driveMower(t,s);
 }
 
@@ -507,14 +507,14 @@ bool readAutoSwitch(){
 const char* sonarText(const SonarState& s){return s.fault?"FAULT":(s.blocked?"BLOCK":"clear");}
 void printStatus(bool autoMode){
  uint32_t now=millis();if(now-lastStatusMs<STATUS_INTERVAL_MS)return;lastStatusMs=now;
- Serial.printf("mode=%s ramp=%+.2f/%+.2f rcArmed=%d front=%s(%.0fcm,%s) rear=%s(%.0fcm,%s)\n",
- autoMode?"AUTO":"RC",rampThrottle,rampSteering,rcArmed?1:0,
+ Serial.printf("REV6 mode=%s ramp=%+.2f/%+.2f rcArmed=%d GPIO22=%d benchRequested=%d benchConfirmed=%d front=%s(%.0fcm,%s) rear=%s(%.0fcm,%s)\n",
+ autoMode?"AUTO":"RC",rampThrottle,rampSteering,rcArmed?1:0,digitalRead(PIN_FRONT_ECHO),benchRequested?1:0,benchConfirmed?1:0,
  sonarText(frontSonar),frontSonar.distanceCm,frontSonar.armed?"armed":"UNARMED",
  sonarText(rearSonar),rearSonar.distanceCm,rearSonar.armed?"armed":"UNARMED");
 }
 
 void setup(){
- Serial.begin(115200);Serial2.begin(115200,SERIAL_8N1,PIN_AUTO_RX,PIN_AUTO_TX);
+ Serial.begin(115200);Serial.println("POPS MOWER CART FIRMWARE REVISION 6");Serial2.begin(115200,SERIAL_8N1,PIN_AUTO_RX,PIN_AUTO_TX);
  pinMode(PIN_MOTOR_ENABLE,OUTPUT);digitalWrite(PIN_MOTOR_ENABLE,LOW);
  pinMode(PIN_RC_STEERING,INPUT);pinMode(PIN_RC_THROTTLE,INPUT);pinMode(PIN_AUTO_SWITCH,INPUT_PULLUP);
  // GPIO22 is shared with front ECHO. Unplug the ECHO wire AND divider before using jumper.
