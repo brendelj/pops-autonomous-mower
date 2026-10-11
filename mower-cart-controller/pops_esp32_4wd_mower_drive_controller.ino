@@ -1,13 +1,15 @@
 /*
 ==========================================================================================
- POPS' AUTONOMOUS MOWER - MOWER CART DRIVE CONTROLLER                     (revision 9)
+ POPS' AUTONOMOUS MOWER - MOWER CART DRIVE CONTROLLER                     (revision 10)
 ==========================================================================================
- REVISION 9 - LOW-SPEED SKID STEERING AND WHEEL DIAGNOSTICS
+ REVISION 10 - SMOOTH PIVOT TRANSITION AND RESPONSIVE MOVING STEERING
  -----------------------------------------------------------------------------------------
    Periodic status includes firmware revision, GPIO22 and bench state.
    GPIO22 LOW disables absent ultrasonic sensors in RC mode.
-   At low speed, full steering can reverse the inside wheels for stronger turns.
-   Serial diagnostics include actual post-reversal motor drive signs.
+   Near-neutral throttle stays in pivot mode despite CH2 jitter.
+   Pivot-to-moving transition blends continuously instead of switching abruptly.
+   Moving steering is linear and stronger for small steering inputs.
+   Wheel diameter compensation and per-wheel motor diagnostics remain active.
 
  REVISION 5 - GROUNDED GPIO22 BENCH DIAGNOSTIC / 10% PIVOT
  -----------------------------------------------------------------------------------------
@@ -302,12 +304,16 @@ const float MAX_THROTTLE=1.0f;
 const float RAMP_ACCEL_PER_SEC=2.0f;
 const float RAMP_DECEL_PER_SEC=6.0f;
 
-// Stationary: throttle within 10us of neutral produces counter-rotating wheels.
-// Pivot power is capped to limit current surges; tune after measuring motor current.
-const float PIVOT_MAX_POWER=0.65f;
-const float LOW_SPEED_STEER_REDUCTION=1.20f; // at low speed, full steering can reverse inside wheels
-const float HIGH_SPEED_STEER_REDUCTION=0.55f;
-const float STEER_SPEED_TRANSITION=0.50f;
+// Rev10 skid-steer calibration. All speeds are normalized motor commands, NOT measured RPM.
+// Near-neutral throttle retains a pivot even if CH2 jitters a few microseconds.
+// Transition gradually from counter-rotating pivot to forward/reverse differential drive.
+const float PIVOT_MAX_POWER=0.65f;         // test current draw before increasing
+const float PIVOT_ENTER_THROTTLE=0.06f;    // about 30us around CH2 neutral
+const float PIVOT_EXIT_THROTTLE=0.22f;     // about 110us; blended transition
+const float LOW_SPEED_STEER_REDUCTION=1.10f;
+const float HIGH_SPEED_STEER_REDUCTION=0.65f;
+const float STEER_SPEED_TRANSITION=0.65f;
+const float STEER_EXPONENT=1.0f;          // linear steering, responsive to small movements
 
 // GPIO22 LOW at startup means ultrasonic sensors are not installed.
 bool benchRequested=false;
@@ -384,21 +390,29 @@ void normalizeWheelCommands(float&fl,float&fr,float&rl,float&rr){
  if(m>1.0f){fl/=m;fr/=m;rl/=m;rr/=m;}
 }
 void calculateDriveCommands(float throttle,float steering,float& left,float& right){
- throttle=constrain(throttle,-1.0f,1.0f);steering=constrain(steering,-1.0f,1.0f);
- const float turn=fabsf(steering), speed=fabsf(throttle);
- if(speed==0.0f){
-  // Stationary skid-steer: opposing sides, proportional to steering position.
-  const float pivot=steering*PIVOT_MAX_POWER;
-  left=pivot;right=-pivot;return;
- }
- // While moving, preserve outside wheel command; reduce only inside wheels.
- // At low speed allow stronger differential; at high speed reduce differential.
+ throttle=constrain(throttle,-1.0f,1.0f);
+ steering=constrain(steering,-1.0f,1.0f);
+ const float speed=fabsf(throttle);
+ const float turn=powf(fabsf(steering),STEER_EXPONENT);
+ if(turn<0.0001f){left=throttle;right=throttle;return;}
+ // Stationary pivot: opposite directions on left/right, with steering-proportional force.
+ const float pivot=steering*PIVOT_MAX_POWER;
+ const float pivotLeft=pivot,pivotRight=-pivot;
+ if(speed<=PIVOT_ENTER_THROTTLE){left=pivotLeft;right=pivotRight;return;}
+ // Moving turn: outside side stays at throttle; inside side slows.
+ // A hard turn at low speed can reverse the inside side slightly.
  const float speedBlend=constrain(speed/STEER_SPEED_TRANSITION,0.0f,1.0f);
- const float maxReduction=LOW_SPEED_STEER_REDUCTION+(HIGH_SPEED_STEER_REDUCTION-LOW_SPEED_STEER_REDUCTION)*speedBlend;
- const float inside=throttle*(1.0f-maxReduction*turn*turn);
- if(steering>0.0f){left=throttle;right=inside;}
- else if(steering<0.0f){left=inside;right=throttle;}
- else{left=throttle;right=throttle;}
+ const float reduction=LOW_SPEED_STEER_REDUCTION+
+     (HIGH_SPEED_STEER_REDUCTION-LOW_SPEED_STEER_REDUCTION)*speedBlend;
+ const float inside=throttle*(1.0f-reduction*turn);
+ float movingLeft=throttle,movingRight=throttle;
+ if(steering>0.0f)movingRight=inside;
+ else movingLeft=inside;
+ // Blend continuously out of pivot mode; avoids sudden reversal near neutral.
+ const float blend=constrain((speed-PIVOT_ENTER_THROTTLE)/
+     (PIVOT_EXIT_THROTTLE-PIVOT_ENTER_THROTTLE),0.0f,1.0f);
+ left=pivotLeft*(1.0f-blend)+movingLeft*blend;
+ right=pivotRight*(1.0f-blend)+movingRight*blend;
 }
 void driveMower(float throttle,float steering){
  float left,right;calculateDriveCommands(throttle,steering,left,right);
@@ -508,14 +522,14 @@ bool readAutoSwitch(){
 const char* sonarText(const SonarState& s){return s.fault?"FAULT":(s.blocked?"BLOCK":"clear");}
 void printStatus(bool autoMode){
  uint32_t now=millis();if(now-lastStatusMs<STATUS_INTERVAL_MS)return;lastStatusMs=now;
- Serial.printf("REV9 mode=%s ramp=%+.2f/%+.2f rcArmed=%d GPIO22=%d sonarDisabled=%d front=%s(%.0fcm,%s) rear=%s(%.0fcm,%s)\n",
+ Serial.printf("REV10 mode=%s ramp=%+.2f/%+.2f rcArmed=%d GPIO22=%d sonarDisabled=%d front=%s(%.0fcm,%s) rear=%s(%.0fcm,%s)\n",
  autoMode?"AUTO":"RC",rampThrottle,rampSteering,rcArmed?1:0,digitalRead(PIN_FRONT_ECHO),benchRequested?1:0,
  sonarText(frontSonar),frontSonar.distanceCm,frontSonar.armed?"armed":"UNARMED",
  sonarText(rearSonar),rearSonar.distanceCm,rearSonar.armed?"armed":"UNARMED");
 }
 
 void setup(){
- Serial.begin(115200);Serial.println("POPS MOWER CART FIRMWARE REVISION 9");Serial2.begin(115200,SERIAL_8N1,PIN_AUTO_RX,PIN_AUTO_TX);
+ Serial.begin(115200);Serial.println("POPS MOWER CART FIRMWARE REVISION 10");Serial2.begin(115200,SERIAL_8N1,PIN_AUTO_RX,PIN_AUTO_TX);
  pinMode(PIN_MOTOR_ENABLE,OUTPUT);digitalWrite(PIN_MOTOR_ENABLE,LOW);
  pinMode(PIN_RC_STEERING,INPUT);pinMode(PIN_RC_THROTTLE,INPUT);pinMode(PIN_AUTO_SWITCH,INPUT_PULLUP);
  // GPIO22 is shared with front ECHO. Unplug the ECHO wire AND divider before using jumper.
@@ -569,7 +583,7 @@ void loop(){
    lastRcDebugMs=now;float dl,dr;calculateDriveCommands(t,s,dl,dr);
    float dfl=dl*FRONT_WHEEL_SCALE*FL_TRIM,dfr=dr*FRONT_WHEEL_SCALE*FR_TRIM;
    float drl=dl*RL_TRIM,drr=dr*RR_TRIM;normalizeWheelCommands(dfl,dfr,drl,drr);
-   Serial.printf("REV9 CH1=%u CH2=%u T=%+.2f S=%+.2f L=%+.2f R=%+.2f FL=%+.2f FR=%+.2f RL=%+.2f RR=%+.2f | MOTOR_SIGN FL=%+.2f FR=%+.2f RL=%+.2f RR=%+.2f\n",
+   Serial.printf("REV10 CH1=%u CH2=%u T=%+.2f S=%+.2f L=%+.2f R=%+.2f FL=%+.2f FR=%+.2f RL=%+.2f RR=%+.2f | MOTOR_SIGN FL=%+.2f FR=%+.2f RL=%+.2f RR=%+.2f\n",
      sp,tp,t,s,dl,dr,dfl,dfr,drl,drr,FL_REVERSED?-dfl:dfl,FR_REVERSED?-dfr:dfr,RL_REVERSED?-drl:drl,RR_REVERSED?-drr:drr);
   }
   if(!rcArmed){
