@@ -1,6 +1,6 @@
 /*
 ==========================================================================================
- POPS' AUTONOMOUS MOWER - MOWER CART DRIVE CONTROLLER                     (revision 6)
+ POPS' AUTONOMOUS MOWER - MOWER CART DRIVE CONTROLLER                     (revision 7)
 ==========================================================================================
  REVISION 7 - GPIO22 LOW DISABLES ULTRASONIC INTERLOCKS IN RC MODE
  -----------------------------------------------------------------------------------------
