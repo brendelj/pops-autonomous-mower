@@ -397,6 +397,7 @@ void driveMower(float throttle,float steering){
  float left,right;calculateDriveCommands(throttle,steering,left,right);
  float fl=left*FRONT_WHEEL_SCALE*FL_TRIM,fr=right*FRONT_WHEEL_SCALE*FR_TRIM;
  float rl=left*RL_TRIM,rr=right*RR_TRIM;normalizeWheelCommands(fl,fr,rl,rr);
+ if(benchRequested){fl=constrain(fl,-BENCH_MAX_POWER,BENCH_MAX_POWER);fr=constrain(fr,-BENCH_MAX_POWER,BENCH_MAX_POWER);rl=constrain(rl,-BENCH_MAX_POWER,BENCH_MAX_POWER);rr=constrain(rr,-BENCH_MAX_POWER,BENCH_MAX_POWER);}
  setMotor(PIN_FL_RPWM,PIN_FL_LPWM,fl,FL_REVERSED);setMotor(PIN_FR_RPWM,PIN_FR_LPWM,fr,FR_REVERSED);
  setMotor(PIN_RL_RPWM,PIN_RL_LPWM,rl,RL_REVERSED);setMotor(PIN_RR_RPWM,PIN_RR_LPWM,rr,RR_REVERSED);
 }
