@@ -1,7 +1,16 @@
 /*
 ==========================================================================================
- POPS' AUTONOMOUS MOWER - MOWER CART DRIVE CONTROLLER                     (revision 4)
+ POPS' AUTONOMOUS MOWER - MOWER CART DRIVE CONTROLLER                     (revision 5)
 ==========================================================================================
+ REVISION 5 - GROUNDED GPIO22 BENCH DIAGNOSTIC / 10% PIVOT
+ -----------------------------------------------------------------------------------------
+   GPIO22-to-GND at boot requests a restricted RC-only bench mode; the front ECHO
+   cable and its level-divider MUST be unplugged for jumper detection.
+   The jumper alone NEVER enables movement: with wheels elevated, hold BOTH RC
+   sticks full left/reverse for 2 seconds after RC arming to enable diagnostics.
+   Power limited to 15%; autonomous drive is disabled. Restart to exit.
+   This is NOT a substitute for an emergency stop or collision detection.
+
  REVISION 4 STEERING / CURRENT CONTROL
  -----------------------------------------------------------------------------------------
    1. Replaces additive throttle+steering mixing with a power-reducing skid-steer mixer.
@@ -287,7 +296,11 @@ const float RAMP_ACCEL_PER_SEC=2.0f;
 const float RAMP_DECEL_PER_SEC=6.0f;
 
 // Revision 4 skid-steer tuning. These values reduce current demand during turns.
-const float PIVOT_THROTTLE_THRESHOLD=0.05f;
+const float PIVOT_THROTTLE_THRESHOLD=0.10f;
+const float BENCH_MAX_POWER=0.15f;
+const uint32_t BENCH_CONFIRM_MS=2000;
+bool benchRequested=false, benchConfirmed=false;
+uint32_t benchConfirmStartMs=0;
 const float PIVOT_MAX_POWER=0.25f;
 const float HARD_TURN_OUTSIDE_REDUCTION=0.45f; // full moving turn: outside side = 55% of requested throttle
 
@@ -432,10 +445,12 @@ void updateOneSonar(SonarState& s,bool isFront){
  }
 }
 void updateSonars(){
+ if(benchRequested)return;
  uint32_t now=millis();if(now-lastSonarSampleMs<SONAR_SAMPLE_INTERVAL_MS)return;lastSonarSampleMs=now;
  if(sampleFrontNext)updateOneSonar(frontSonar,true);else updateOneSonar(rearSonar,false);sampleFrontNext=!sampleFrontNext;
 }
 bool applyObstacleInterlock(float& throttle,float& steering){
+ if(benchRequested)return false; // Only in manually confirmed, RC-only elevated-wheel diagnostic
  bool cut=false;if(throttle>0.0f&&frontSonar.blocked){throttle=0.0f;cut=true;}
  if(throttle<0.0f&&rearSonar.blocked){throttle=0.0f;cut=true;}steering=constrain(steering,-1.0f,1.0f);return cut;
 }
@@ -449,7 +464,14 @@ void driveWithRamp(float targetThrottle,float targetSteering){
  uint32_t now=millis();float dt=(now-lastRampMs)/1000.0f;lastRampMs=now;if(dt>0.1f)dt=0.1f;
  targetThrottle=constrain(targetThrottle,-1.0f,1.0f)*MAX_THROTTLE;targetSteering=constrain(targetSteering,-1.0f,1.0f);
  rampThrottle=slewLimit(rampThrottle,targetThrottle,dt);rampSteering=slewLimit(rampSteering,targetSteering,dt);
- float t=rampThrottle,s=rampSteering;applyObstacleInterlock(t,s);rampThrottle=t;driveMower(t,s);
+ float t=rampThrottle,s=rampSteering;applyObstacleInterlock(t,s);rampThrottle=t;
+ if(benchRequested){
+  // Limit the actual wheel commands, including stationary pivots.
+  float left,right;calculateDriveCommands(t,s,left,right);
+  float peak=max(fabsf(left),fabsf(right));
+  if(peak>BENCH_MAX_POWER){float scale=BENCH_MAX_POWER/peak;t*=scale;s*=scale;}
+ }
+ driveMower(t,s);
 }
 
 void autoStopCommand(){autoThrottle=0.0f;autoSteering=0.0f;autoCommandValid=true;lastAutoCommandMs=millis();}
@@ -494,13 +516,20 @@ void setup(){
  Serial.begin(115200);Serial2.begin(115200,SERIAL_8N1,PIN_AUTO_RX,PIN_AUTO_TX);
  pinMode(PIN_MOTOR_ENABLE,OUTPUT);digitalWrite(PIN_MOTOR_ENABLE,LOW);
  pinMode(PIN_RC_STEERING,INPUT);pinMode(PIN_RC_THROTTLE,INPUT);pinMode(PIN_AUTO_SWITCH,INPUT_PULLUP);
- pinMode(PIN_FRONT_TRIG,OUTPUT);pinMode(PIN_FRONT_ECHO,INPUT);pinMode(PIN_REAR_TRIG,OUTPUT);pinMode(PIN_REAR_ECHO,INPUT);
+ // GPIO22 is shared with front ECHO. Unplug the ECHO wire AND divider before using jumper.
+ pinMode(PIN_FRONT_ECHO,INPUT_PULLUP);delay(5);
+ benchRequested=(digitalRead(PIN_FRONT_ECHO)==LOW);
+ Serial.printf("GPIO22 diagnostic jumper: %s; front ECHO must be disconnected in test mode\n",benchRequested?"DETECTED":"not detected");
+ pinMode(PIN_FRONT_TRIG,OUTPUT);
+ if(!benchRequested)pinMode(PIN_FRONT_ECHO,INPUT);
+ pinMode(PIN_REAR_TRIG,OUTPUT);pinMode(PIN_REAR_ECHO,INPUT);
  digitalWrite(PIN_FRONT_TRIG,LOW);digitalWrite(PIN_REAR_TRIG,LOW);
  const uint8_t pins[]={PIN_FL_RPWM,PIN_FL_LPWM,PIN_FR_RPWM,PIN_FR_LPWM,PIN_RL_RPWM,PIN_RL_LPWM,PIN_RR_RPWM,PIN_RR_LPWM};
  for(uint8_t p:pins)configurePwmPin(p);haltAll();
  attachInterrupt(digitalPinToInterrupt(PIN_RC_STEERING),steeringISR,CHANGE);
  attachInterrupt(digitalPinToInterrupt(PIN_RC_THROTTLE),throttleISR,CHANGE);
- for(uint8_t i=0;i<6;i++){updateSonars();delay(75);}
+ if(!benchRequested){for(uint8_t i=0;i<6;i++){updateSonars();delay(75);}}
+ else Serial.println("BENCH MODE REQUESTED: RC only, wheels raised; hold steering full LEFT and throttle full REVERSE for 2s after RC neutral arming.");
  switchStable=switchCandidate=(digitalRead(PIN_AUTO_SWITCH)==LOW);switchCandidateMs=millis();
  previousAutoMode=switchStable;modeChangeMs=millis();autoCommandValid=false;rcArmed=false;rcNeutralTiming=false;
  delay(500);digitalWrite(PIN_MOTOR_ENABLE,HIGH);
@@ -519,9 +548,11 @@ void loop(){
  if(autoMode!=previousAutoMode){
   haltAll();modeChangeMs=millis();previousAutoMode=autoMode;autoThrottle=autoSteering=0.0f;autoCommandValid=false;
   rcArmed=false;rcNeutralTiming=false;
+  if(benchRequested){benchConfirmed=false;benchConfirmStartMs=0;}
  }
  printStatus(autoMode);if(millis()-modeChangeMs<MODE_CHANGE_STOP_MS){haltAll();delay(5);return;}
  if(autoMode){
+  if(benchRequested){haltAll();delay(5);return;} // Never allow autonomous driving without sensors
   if(!autoCommandValid||millis()-lastAutoCommandMs>AUTO_TIMEOUT_MS){haltAll();delay(5);return;}
   driveWithRamp(autoThrottle,autoSteering);
  }else{
@@ -537,12 +568,20 @@ void loop(){
    lastRcDebugMs=now;float dl,dr;calculateDriveCommands(t,s,dl,dr);
    float dfl=dl*FRONT_WHEEL_SCALE*FL_TRIM,dfr=dr*FRONT_WHEEL_SCALE*FR_TRIM;
    float drl=dl*RL_TRIM,drr=dr*RR_TRIM;normalizeWheelCommands(dfl,dfr,drl,drr);
-   Serial.printf("CH1=%u CH2=%u  T=%+.2f S=%+.2f  L=%+.2f R=%+.2f  FL=%+.2f FR=%+.2f RL=%+.2f RR=%+.2f\\n",
+   Serial.printf("CH1=%u CH2=%u  T=%+.2f S=%+.2f  L=%+.2f R=%+.2f  FL=%+.2f FR=%+.2f RL=%+.2f RR=%+.2f\n",
     sp,tp,t,s,dl,dr,dfl,dfr,drl,drr);
   }
   if(!rcArmed){
    if(t==0.0f&&s==0.0f){if(!rcNeutralTiming){rcNeutralTiming=true;rcNeutralStartMs=now;}else if(now-rcNeutralStartMs>=RC_NEUTRAL_HOLD_MS)rcArmed=true;}
    else rcNeutralTiming=false;if(!rcArmed){haltAll();delay(5);return;}
+  }
+  if(benchRequested&&!benchConfirmed){
+   // Deliberate operator action: only after normal neutral-stick RC arming.
+   if(t<=-0.90f&&s<=-0.90f){
+    if(!benchConfirmStartMs)benchConfirmStartMs=now;
+    else if(now-benchConfirmStartMs>=BENCH_CONFIRM_MS){benchConfirmed=true;Serial.println("BENCH MODE CONFIRMED: 15% maximum wheel command; RC ONLY");}
+   }else benchConfirmStartMs=0;
+   haltAll();delay(5);return;
   }
   driveWithRamp(t,s);
  }
