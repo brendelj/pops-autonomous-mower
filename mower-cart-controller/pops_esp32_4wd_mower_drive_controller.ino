@@ -308,6 +308,9 @@ const float LOW_SPEED_STEER_REDUCTION=0.95f;
 const float HIGH_SPEED_STEER_REDUCTION=0.55f;
 const float STEER_SPEED_TRANSITION=0.50f;
 
+// GPIO22 LOW at startup means ultrasonic sensors are not installed.
+bool benchRequested=false;
+
 const bool AUTO_REQUIRE_CHECKSUM=false;
 
 const float OBSTACLE_STOP_CM=30.48f;
