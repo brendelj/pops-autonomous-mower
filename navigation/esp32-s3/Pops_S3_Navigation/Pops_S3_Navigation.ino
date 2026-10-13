@@ -1,4 +1,52 @@
 /*
+================================================================================
+ POPS ESP32-S3 NAVIGATION CONTROLLER - PINOUT / WIRING MAP (PROVISIONAL)
+================================================================================
+ TARGET: ESP32-S3-N16R8, Arduino ESP32S3 Dev Module
+ These are GPIO NUMBERS, NOT physical header positions. Match each GPIO to
+ the SILKSCREEN of your exact S3 board before connecting any wire.
+ DO NOT assume the 30-pin original ESP32 cart pinout applies to the S3.
+
+ S3 GPIO / SIGNAL                    CONNECTION / DIRECTION
+ ---------------------------------------------------------------------------
+ GPIO18  CART_RX (UART1 RX)   <------ Cart Rev10 GPIO17 TX2 (3.3V logic)
+ GPIO21  CART_TX (UART1 TX)   ------> Cart Rev10 GPIO16 RX2 (3.3V logic)
+ GPIO16  UWB_RX  (UART2 RX)   <------ BU04 TTL TX (EXPERIMENTAL / UNPROVEN)
+ GPIO17  UWB_TX  (UART2 TX)   ------> BU04 TTL RX (EXPERIMENTAL / UNPROVEN)
+ GND     COMMON GROUND       ------- Cart controller GND / logic supply GND
+ 5V/VIN  POWER INPUT         <------ Regulated 5V, only if board supports it
+ USB     FLASH / MONITOR     <-----> PC (board connector/CDC mode dependent)
+
+ SIGNAL CONNECTION SCHEMATIC (NOT PHYSICAL HEADER ORDER)
+ ------------------------
+  +-----------------------+                 +-------------------------+
+  | ESP32-S3 NAVIGATION   |                 | ESP32 CART REVISION 10  |
+  | GPIO18 UART1 RX       |<----------------| GPIO17 UART2 TX         |
+  | GPIO21 UART1 TX       |---------------->| GPIO16 UART2 RX         |
+  | GND                   |-----------------| GND                     |
+  +-----------------------+                 +-------------------------+
+             ^
+             | GPIO16 RX  (BU04 TX: NOT VERIFIED)
+             v GPIO17 TX  (BU04 RX: NOT VERIFIED)
+  +-----------------------+
+  | MOWER BU04 UWB MODULE |
+  | USB-C: BINARY DATA WAS OBSERVED HERE, NOT PROVEN ON TTL UART
+  +-----------------------+
+
+ SAFETY / VERIFICATION
+ - NEVER connect 5V TTL to ESP32-S3 GPIO; confirm 3.3V signal levels.
+ - Never wire BU04 USB D+ or D- directly to UART GPIO16/17.
+ - S3 USB-host hardware/software and BU04 USB class remain unverified.
+ - A common logic ground is required; motor power requires independent E-stop.
+ - No motor DRIVE commands are issued by this commissioning firmware.
+ - GPIO18/21 and GPIO16/17 are proposed; verify board availability/strapping.
+ - Front sonar is at cart FRONT CENTER; rear sonar at cart REAR CENTER.
+ - Battery and controller enclosures are mounted at cart FRONT.
+ - BU04 antenna is 9 inches (initial estimate) behind cart FRONT, at the
+   leading edge of the centered 20x20-inch cutting footprint.
+================================================================================
+*/
+/*
  Pops ESP32-S3 grass-milling navigation prototype v0.1
  Safe commissioning build: NO autonomous DRV commands.
  Cart Rev10 UART: cart TX GPIO17 -> S3 RX GPIO18;
