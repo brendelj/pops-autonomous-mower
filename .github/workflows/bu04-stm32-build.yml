@@ -1,0 +1,25 @@
+name: BU04 STM32 Positioning Firmware
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/bu04-stm32-uwb-positioning
+    paths:
+      - 'firmware/stm32-bu04-positioning/**'
+      - '.github/workflows/bu04-stm32-build.yml'
+
+jobs:
+  source-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify STM32 project sources are available
+        shell: bash
+        run: |
+          if [ ! -d firmware/stm32-bu04-positioning/vendor-project ]; then
+            echo "::error::Ai-Thinker BU04 STM32 source project has not yet been imported. Cannot compile firmware."
+            exit 1
+          fi
+          echo "::error::STM32 build configuration is not yet verified. Configure the vendor-specific build command before producing firmware."
+          exit 1
