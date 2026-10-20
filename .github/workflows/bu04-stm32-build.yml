@@ -1,4 +1,4 @@
-name: BU04 STM32 SDK Source Verification
+name: BU04 STM32 Firmware Source Validation
 
 on:
   workflow_dispatch:
@@ -10,24 +10,26 @@ on:
       - '.github/workflows/bu04-stm32-build.yml'
 
 jobs:
-  verify-vendor-sdk:
+  validate-patched-source:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Retrieve actual BU04 firmware SDK
-        run: |
-          git clone --depth 1 --branch master https://github.com/Ai-Thinker-AIoT/STM32F103-BU0x_SDK.git firmware/stm32-bu04-positioning/vendor-project
-      - name: Validate project and TWR source files
+      - name: Retrieve manufacturer SDK
+        run: git clone --depth 1 --branch master https://github.com/Ai-Thinker-AIoT/STM32F103-BU0x_SDK.git firmware/stm32-bu04-positioning/vendor-project
+      - name: Apply mower telemetry firmware patch
+        run: python3 firmware/stm32-bu04-positioning/tools/patch_vendor_sdk.py
+      - name: Verify patched firmware source
+        shell: bash
         run: |
           set -eu
           root=firmware/stm32-bu04-positioning/vendor-project
           test -s "$root/Projects/USER/Project.uvprojx"
-          test -s "$root/Components/Examples/examples/ex_05c_ds_twr_init_sts_sdc/ds_twr_sts_sdc_init.c"
-          test -s "$root/Components/Examples/examples/ex_05d_ds_twr_resp_sts_sdc/ds_twr_sts_sdc_resp.c"
-          echo "Vendor SDK retrieved and source files verified."
-      - name: Archive SDK for build conversion
+          grep -Fq 'mower_emit_ranges(dis);' "$root/Components/APP/user_out.c"
+          grep -Fq 'R,%d,%u' "$root/Components/APP/user_out.c"
+          echo "BU04 mower firmware source patch verified. NOT a firmware binary build."
+      - name: Upload patched source
         uses: actions/upload-artifact@v4
         with:
-          name: bu04-vendor-sdk-source
+          name: bu04-mower-patched-sdk-source
           path: firmware/stm32-bu04-positioning/vendor-project
           retention-days: 7
