@@ -5,7 +5,7 @@ import sys
 
 root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("firmware/stm32-bu04-positioning/vendor-project")
 path = root / "Components/APP/user_out.c"
-source = path.read_text(encoding="utf-8")
+source = path.read_bytes().decode("latin-1")
 marker = "bool aiio_output = true;"
 assert source.count(marker) == 1, "Upstream user_out.c changed: marker not unique"
 injection = r'''
@@ -33,5 +33,5 @@ source = source.replace(marker, injection + "\n" + marker, 1)
 needle = 'void tag_twr_output_user (uint16_t* dis)\n{\n'
 assert source.count(needle) == 1, "Upstream tag callback changed"
 source = source.replace(needle, needle + '    mower_emit_ranges(dis);\n', 1)
-path.write_text(source, encoding="utf-8")
+path.write_bytes(source.encode("latin-1"))
 print("Applied mower range UART patch to", path)
