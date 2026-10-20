@@ -25,7 +25,7 @@ static void mower_emit_ranges(const uint16_t *distances)
     {
         uint16_t cm = distances[i];
         if (cm == 0 || cm == 0xFFFF) continue;
-        _dbg_printf("R,%d,%u\\r\\n", i + 1, (unsigned int)cm);
+        _dbg_printf("R,%d,%u\r\n", i + 1, (unsigned int)cm);
     }
 }
 '''
